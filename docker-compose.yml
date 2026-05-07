@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # Flask ML API
+  ml-api:
+    build: ./ml-model
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - PORT=5000
+    volumes:
+      - ./ml-model:/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:5000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # Node.js API Gateway (optional)
+  api-gateway:
+    build: ./backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - FLASK_URL=http://ml-api:5000
+      - FRONTEND_URL=http://localhost:3000
+    depends_on:
+      ml-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Frontend (for production)
+  frontend:
+    build: 
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - VITE_API_URL=http://localhost:3001
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
+
+networks:
+  default:
+    name: verinews-network
